@@ -4,7 +4,28 @@ use std::fs::File;
 use std::fs;
 use std::io::prelude::*;
 use std::{thread, time};
+use std::process::Command;
 
+pub fn listprocs() { // list processes (ps aux)
+    Command::new("ps")
+            .arg("-a")
+            .arg("-u")
+            .arg("-x")
+            .spawn()
+            .expect("ps -aux failed to start");
+}
+
+pub fn firewall() { // firewall status (ufw status verbose)
+    Command::new("ufw")
+        .arg("status")
+        .arg("verbose")
+        .spawn()
+        .expect("ufw failed to start");
+}
+
+pub fn fakefilecheck(fakefile: &str) { // used to confuse lsof or other tools, makes engine harder to crack
+    let mut f = File::open(fakefile).expect("file not found");
+}
 
 pub fn filecheck(query: &str, contents: &str) -> bool { // check if query is in a file
 
@@ -17,8 +38,14 @@ pub fn filecheck(query: &str, contents: &str) -> bool { // check if query is in 
 
 }
 
-pub struct Vuln {
+pub fn confuser_defaultlist() {
+    fakefilecheck("/etc/passwd");
+    fakefilecheck("/etc/shadow");
+    fakefilecheck("/etc/group");
+    fakefilecheck("/etc/sudoers"); 
+}
 
+pub struct Vuln {
     points: u64, // how many points its worth
     comment: String, // what appears on the scoring report
     filetocheck: String, // the filepath that the config will be in
@@ -66,6 +93,36 @@ pub fn package_vuln(points: u64, comment: String, answer: String) -> Vuln { // f
     }
 }
 
+pub fn scoring(mut vulns: Vec<Vuln>, start: time::Instant) {
+        loop {
+    let mut scoring_report = String::new();
+        let mut scored_points = 0;
+        let mut possible_points = 0;
+    let duration = start.elapsed();
+    scoring_report.push_str(&format!("Time elapsed: {:?}", duration));
+        scoring_report.push_str("\n");
+        for items in vulns.iter_mut() {
+        possible_points = possible_points + &items.points;
+        items.check_solved();
+        if items.filetocheck == "/var/lib/dpkg/status" {
+        items.solved = !items.solved
+        }
+        if items.solved == true {
+        scored_points = scored_points + &items.points;
+            scoring_report.push_str(&items.points.to_string());
+        scoring_report.push_str(" points - ");
+        scoring_report.push_str(&items.comment);
+        scoring_report.push_str("\n");
+        }
+
+            }
+        // write will create the file if it doesnt exist
+        fs::write("/home/derek/Desktop/scoringreport.txt", &scoring_report).expect("can't read scoring report file lol"); // writing to the scoring report
+        thread::sleep(time::Duration::from_millis(30000)); // loop runs every 30 seconds
+    }
+}
+
+
 fn main() {
     
     let mut vulns: Vec<Vuln> = Vec::new();    // vector of Vuln structs
@@ -76,31 +133,7 @@ fn main() {
     // put vulns here as vulns.push(<config_vuln or package_vuln>(points, description, the file the vuln is in, the keyword));
     // please append .to_string() to any strings in the arguments or it will break :(
     let start = time::Instant::now();    // start time
-    loop {
-	let mut scoring_report = String::new();
-        let mut scored_points = 0;
-        let mut possible_points = 0;
-	let duration = start.elapsed();
-	scoring_report.push_str(&format!("Time elapsed: {:?}", duration));
-        scoring_report.push_str("\n");
-        for items in vulns.iter_mut() {
-	    possible_points = possible_points + &items.points;
-	    items.check_solved();
-	    if items.filetocheck == "/var/lib/dpkg/status" {
-		items.solved = !items.solved
-		}
-	    if items.solved == true {
-		scored_points = scored_points + &items.points;
-	        scoring_report.push_str(&items.points.to_string());
-		scoring_report.push_str(" points - ");
-		scoring_report.push_str(&items.comment);
-		scoring_report.push_str("\n");
-		}
-	    
-            }
-        // write will create the file if it doesnt exist
-        fs::write("/home/derek/Desktop/scoringreport.txt", &scoring_report).expect("can't read scoring report file lol"); // writing to the scoring report       
-        thread::sleep(time::Duration::from_millis(30000)); // loop runs every 30 seconds
-    }
-        
+    listprocs();
+    firewall();
+	scoring(vulns, start);	
 }
